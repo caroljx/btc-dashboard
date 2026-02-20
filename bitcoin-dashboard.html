@@ -689,7 +689,7 @@ function loadCVDD() {
   status.textContent = '正在加载 CSV + API 数据...';
 
   Promise.all([
-    fetch('btc_history.csv').then(function(r) { return r.text(); }),
+    fetch('https://raw.githubusercontent.com/caroljx/btc-dashboard/main/btc_history.csv').then(function(r) { return r.text(); }),
     fetch('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=365&interval=daily')
       .then(function(r) { return r.json(); })
   ])
