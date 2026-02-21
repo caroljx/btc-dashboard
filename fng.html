@@ -455,6 +455,7 @@ function parseCSVtoPriceMap(text) {
   var lines = text.trim().split('\n');
   var map   = {};
   for (var i = 1; i < lines.length; i++) {
+    var line  = lines[i].replace('\r', '');  // 去掉Windows换行符
     var cols  = lines[i].split(',');
     var price = parseFloat(cols[1]);
     if (!price) continue;
