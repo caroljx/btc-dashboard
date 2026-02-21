@@ -7,6 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<script src="nav.js"></script>
 <style>
   :root {
     --bg: #0a0a0f;
@@ -187,13 +188,7 @@
 </head>
 <body>
 
-<header>
-  <a class="logo" href="bitcoin-dashboard.html">
-    <div class="btc-icon">&#8383;</div>
-    <div class="logo-text">BTC <span>Dashboard</span></div>
-  </a>
-  <a class="back-btn" href="bitcoin-dashboard.html">&#8592; 返回仪表板</a>
-</header>
+<div id="nav-root"></div>
 
 <div class="main">
 
@@ -292,6 +287,7 @@ function setStatus(state, text) {
   document.getElementById('statusText').textContent = text;
 }
 
+renderNav('dca');
 fetch('btc_history.csv')
   .then(function(r) { return r.text(); })
   .then(function(csvText) {
