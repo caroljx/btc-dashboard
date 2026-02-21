@@ -18,6 +18,7 @@ var NAV_ITEMS = {
     { key: 'cvdd',  label: 'CVDD',              file: 'bitcoin-dashboard.html#cvdd' },
     { key: '2yma',  label: '2-Year MA',          file: '2yma.html' },
     { key: '200wma', label: '200W MA Heatmap', file: '200wma.html' },
+    { key: 'fng', label: 'Fear & Greed', file: 'fng.html' },
     // 在这里继续添加指标页面 ↓
   ],
   tools: [
