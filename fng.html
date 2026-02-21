@@ -324,7 +324,7 @@ function updateStats(data) {
 
 function drawChart(fngData, priceData) {
   // fngData 按时间升序排列（最早在前）
-  var labels     = fngData.map(function(d) { return new Date(d.timestamp * 1000); });
+  var labels     = fngData.map(function(d) { return new Date(parseInt(d.timestamp) * 1000); });
   var fngValues  = fngData.map(function(d) { return parseInt(d.value); });
   var barColors  = fngValues.map(function(v) { return fngColor(v) + 'cc'; }); // 带透明度
 
@@ -338,7 +338,7 @@ function drawChart(fngData, priceData) {
     });
   }
   var priceValues = fngData.map(function(d) {
-    var dateStr = new Date(d.timestamp * 1000).toISOString().substring(0, 10);
+    var dateStr = new Date(parseInt(d.timestamp) * 1000).toISOString().substring(0, 10);
     return priceMap[dateStr] || null;
   });
 
