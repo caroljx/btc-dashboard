@@ -479,7 +479,7 @@ Promise.all([
   fetch('https://api.alternative.me/fng/?limit=0')
     .then(function(r) { return r.json(); }),
   // 2. 本地CSV历史价格（2013年起）
-  fetch('btc_history.csv')
+  fetch('https://caroljx.github.io/btc-dashboard/btc_history.csv')
     .then(function(r) { return r.text(); }),
   // 3. CoinGecko近365天价格（补充CSV没有的最近数据）
   fetch('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=365&interval=daily')
