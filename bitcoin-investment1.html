@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>DCA 回测测试</title>
+  <style>
+    body { font-family: monospace; padding: 24px; background: #f5f5f5; }
+    .box {
+      background: white; border: 1px solid #ddd;
+      border-radius: 8px; padding: 16px 20px; margin-bottom: 12px;
+    }
+    .label { color: #888; font-size: 12px; margin-bottom: 4px; }
+    .value { font-size: 20px; color: #222; }
+    table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; margin-top: 20px; }
+    th { background: #f0f0f0; padding: 10px 14px; text-align: left; font-size: 12px; color: #666; }
+    td { padding: 10px 14px; border-top: 1px solid #eee; font-size: 13px; }
+    .green { color: #27ae60; font-weight: bold; }
+    .red   { color: #e74c3c; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h2>DCA 回测：每周四投资 $20（2013/1/1 → 2026/2/20）</h2>
+  <div id="output">加载中...</div>
+
+<script>
+  // 设定参数
+  var DCA_AMOUNT    = 20;           // 每次投入金额（USD）
+  var DCA_WEEKDAY   = 4;            // 星期四（0=周日，1=周一，...，4=周四）
+  var START_DATE    = new Date('2013-01-01');
+  var END_DATE      = new Date('2026-02-20');
+
+  fetch('btc_history.csv')
+    .then(function(r) { return r.text(); })
+    .then(function(csvText) {
+
+      // ── 解析CSV ─────────────────────────────────────────
+      var lines = csvText.trim().split('\n');
+      var priceMap = {};  // 用日期字符串做索引，方便查找
+
+      for (var i = 1; i < lines.length; i++) {
+        var cols  = lines[i].split(',');
+        var price = parseFloat(cols[1]);
+        if (!price) continue;
+        var dateStr = cols[0].substring(0, 10);  // "YYYY-MM-DD"
+        priceMap[dateStr] = price;
+      }
+
+      // ── DCA 回测核心逻辑 ────────────────────────────────
+      //
+      // 遍历从 START_DATE 到 END_DATE 的每一天
+      // 如果是周四，就用当天价格买入 $20 的 BTC
+      // 记录每一笔交易，最后统计总成本和持有量
+
+      var totalInvested = 0;    // 累计投入USD
+      var totalBTC      = 0;    // 累计持有BTC数量
+      var trades        = [];   // 每笔交易记录
+      var skipped       = [];   // 跳过的周四（CSV里没有那天数据）
+
+      // 从START_DATE开始，逐天检查
+      var current = new Date(START_DATE);
+      while (current <= END_DATE) {
+
+        // 只在周四操作
+        if (current.getDay() === DCA_WEEKDAY) {
+          var dateStr = current.toISOString().substring(0, 10);
+          var price   = priceMap[dateStr];
+
+          if (price) {
+            // 找到了当天的价格，执行买入
+            var btcBought  = DCA_AMOUNT / price;
+            totalInvested += DCA_AMOUNT;
+            totalBTC      += btcBought;
+
+            trades.push({
+              date:      dateStr,
+              price:     price,
+              btcBought: btcBought,
+              totalBTC:  totalBTC,
+              totalInvested: totalInvested,
+            });
+          } else {
+            // CSV里没有那天的数据（节假日、早期数据缺失等）
+            // 记录下来，方便检查
+            skipped.push(dateStr);
+          }
+        }
+
+        // 前进一天
+        current.setDate(current.getDate() + 1);
+      }
+
+      // ── 计算最终结果 ─────────────────────────────────────
+      // 用CSV里最后一天的价格作为当前价格
+      var lastTrade    = trades[trades.length - 1];
+      var latestPrice  = lastTrade.price;  // CSV最后一天的收盘价
+
+      var currentValue = totalBTC * latestPrice;   // 当前持仓市值
+      var profit       = currentValue - totalInvested;  // 盈亏
+      var roi          = (profit / totalInvested) * 100; // 收益率%
+      var avgCost      = totalInvested / totalBTC;  // 平均成本价
+
+      // ── 展示结果 ─────────────────────────────────────────
+      var isProfit = profit >= 0;
+
+      // 显示最近10笔和最早10笔交易
+      var sampleRows = '';
+
+      // 最早10笔
+      sampleRows += '<tr><td colspan="5" style="background:#f9f9f9;color:#888;font-size:11px;padding:6px 14px">── 最早10笔 ──</td></tr>';
+      for (var i = 0; i < Math.min(10, trades.length); i++) {
+        var t = trades[i];
+        sampleRows +=
+          '<tr>' +
+            '<td>' + t.date + '</td>' +
+            '<td>$' + t.price.toFixed(2) + '</td>' +
+            '<td>' + t.btcBought.toFixed(6) + ' BTC</td>' +
+            '<td>$' + t.totalInvested.toFixed(0) + '</td>' +
+            '<td>' + t.totalBTC.toFixed(6) + ' BTC</td>' +
+          '</tr>';
+      }
+
+      // 最近10笔
+      sampleRows += '<tr><td colspan="5" style="background:#f9f9f9;color:#888;font-size:11px;padding:6px 14px">── 最近10笔 ──</td></tr>';
+      for (var i = Math.max(0, trades.length - 10); i < trades.length; i++) {
+        var t = trades[i];
+        sampleRows +=
+          '<tr>' +
+            '<td>' + t.date + '</td>' +
+            '<td>$' + t.price.toFixed(2) + '</td>' +
+            '<td>' + t.btcBought.toFixed(6) + ' BTC</td>' +
+            '<td>$' + t.totalInvested.toFixed(0) + '</td>' +
+            '<td>' + t.totalBTC.toFixed(6) + ' BTC</td>' +
+          '</tr>';
+      }
+
+      document.getElementById('output').innerHTML =
+        '<div class="box">' +
+          '<div class="label">投资策略</div>' +
+          '<div class="value" style="font-size:15px">' +
+            '每周四买入 $' + DCA_AMOUNT + ' 的 BTC<br>' +
+            '2013/1/1 → 2026/2/20' +
+          '</div>' +
+        '</div>' +
+        '<div class="box">' +
+          '<div class="label">执行次数</div>' +
+          '<div class="value">' + trades.length + ' 次' +
+            '<span style="font-size:13px;color:#aaa;margin-left:12px">（跳过 ' + skipped.length + ' 个无数据的周四）</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="box">' +
+          '<div class="label">累计投入</div>' +
+          '<div class="value">$' + totalInvested.toLocaleString('en-US', {maximumFractionDigits: 0}) + '</div>' +
+        '</div>' +
+        '<div class="box">' +
+          '<div class="label">累计持有 BTC</div>' +
+          '<div class="value">' + totalBTC.toFixed(6) + ' BTC</div>' +
+        '</div>' +
+        '<div class="box">' +
+          '<div class="label">平均成本价（每BTC）</div>' +
+          '<div class="value">$' + avgCost.toLocaleString('en-US', {maximumFractionDigits: 2}) + '</div>' +
+        '</div>' +
+        '<div class="box">' +
+          '<div class="label">参考价格（CSV最后一天收盘价）</div>' +
+          '<div class="value" style="color:#e67e22">$' + latestPrice.toLocaleString('en-US', {maximumFractionDigits: 2}) + '</div>' +
+        '</div>' +
+        '<div class="box">' +
+          '<div class="label">当前持仓市值</div>' +
+          '<div class="value" style="color:#2980b9">$' + currentValue.toLocaleString('en-US', {maximumFractionDigits: 0}) + '</div>' +
+        '</div>' +
+        '<div class="box">' +
+          '<div class="label">总盈亏</div>' +
+          '<div class="value ' + (isProfit ? 'green' : 'red') + '">' +
+            (isProfit ? '+' : '') + '$' + profit.toLocaleString('en-US', {maximumFractionDigits: 0}) +
+          '</div>' +
+        '</div>' +
+        '<div class="box">' +
+          '<div class="label">总收益率</div>' +
+          '<div class="value ' + (isProfit ? 'green' : 'red') + '">' +
+            (isProfit ? '+' : '') + roi.toFixed(1) + '%' +
+          '</div>' +
+        '</div>' +
+        '<h3 style="margin:24px 0 10px">交易明细抽样</h3>' +
+        '<table>' +
+          '<tr><th>日期</th><th>当天价格</th><th>买入BTC</th><th>累计投入</th><th>累计持有</th></tr>' +
+          sampleRows +
+        '</table>' +
+        (skipped.length > 0 ?
+          '<p style="margin-top:16px;color:#aaa;font-size:12px">跳过的周四（无数据）：' + skipped.slice(0, 5).join('、') + '...' + '</p>'
+          : '');
+    });
+</script>
+</body>
+</html>
+
