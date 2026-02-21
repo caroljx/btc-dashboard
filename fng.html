@@ -517,7 +517,22 @@ Promise.all([
     '✅ 数据就绪 — 恐惧与贪婪 ' + fngRaw.length + ' 天 | ' +
     'BTC价格 CSV ' + csvDays + ' 天 + API ' + apiDays + ' 天合并'
   );
+// ── 调试：显示priceMap的内容 ──────────────────────
+  var priceKeys  = Object.keys(priceMap);
+  var totalDays  = priceKeys.length;
+  var sampleKeys = priceKeys.slice(0, 3);   // 最早3天
+  var sampleVals = sampleKeys.map(function(k) { return k + '=$' + priceMap[k].toFixed(0); });
 
+  // 找一个FNG的日期，看看priceMap里有没有对应价格
+  var testDate  = new Date(parseInt(fngAsc[0].timestamp) * 1000).toISOString().substring(0, 10);
+  var testPrice = priceMap[testDate];
+
+  var debugEl = document.getElementById('statusText');
+  debugEl.innerHTML =
+    '✅ FNG: ' + fngRaw.length + '天 | ' +
+    'priceMap共 ' + totalDays + ' 天 | ' +
+    '样本: ' + sampleVals.join(', ') + ' | ' +
+    'FNG首日(' + testDate + ')价格: ' + (testPrice ? '$' + testPrice.toFixed(0) : '❌ 找不到');
   drawChart(fngAsc, priceMap);
 })
 .catch(function(err) {
