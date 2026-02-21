@@ -322,25 +322,125 @@ function updateStats(data) {
 //
 // BTC价格从 Alternative.me 的数据里没有，我们用CoinGecko API补充
 
-function drawChart(fngData, priceData) {
-  // fngData 按时间升序排列（最早在前）
-  var labels     = fngData.map(function(d) { return new Date(d.timestamp * 1000); });
+function drawChart(fngData, priceMap) {
+  var labels     = fngData.map(function(d) { return new Date(parseInt(d.timestamp) * 1000); });
   var fngValues  = fngData.map(function(d) { return parseInt(d.value); });
-  var barColors  = fngValues.map(function(v) { return fngColor(v) + 'cc'; }); // 带透明度
+  var barColors  = fngValues.map(function(v) { return fngColor(v) + 'cc'; });
 
-  // priceData 是 CoinGecko 格式 [[timestamp, price], ...]
-  // 我们需要把它对齐到 fngData 的日期
-  var priceMap = {};
-  if (priceData && priceData.prices) {
-    priceData.prices.forEach(function(p) {
-      var dateStr = new Date(p[0]).toISOString().substring(0, 10);
-      priceMap[dateStr] = p[1];
-    });
-  }
+  // 直接从 priceMap 字典里按日期取价格
   var priceValues = fngData.map(function(d) {
-    var dateStr = new Date(d.timestamp * 1000).toISOString().substring(0, 10);
-    return priceMap[dateStr] || null;
+    var dateStr = new Date(parseInt(d.timestamp) * 1000).toISOString().substring(0, 10);
+    var price   = priceMap[dateStr];
+    return price ? price : null;
   });
+
+  // 调试：确认priceValues里有多少个非null值
+  var nonNull = priceValues.filter(function(v) { return v !== null; }).length;
+  console.log('priceValues非null数量：', nonNull, '/ 总共', priceValues.length);
+
+  if (fngChart) fngChart.destroy();
+
+  var ctx = document.getElementById('fngChart').getContext('2d');
+  fngChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: '恐惧与贪婪指数',
+          data: fngValues,
+          backgroundColor: barColors,
+          borderColor: 'transparent',
+          borderWidth: 0,
+          yAxisID: 'y',
+          order: 2,
+        },
+        {
+          label: 'BTC 价格',
+          data: priceValues,
+          type: 'line',
+          borderColor: '#f7b731',
+          backgroundColor: 'transparent',
+          borderWidth: 1.5,
+          pointRadius: 0,
+          tension: 0.2,
+          yAxisID: 'y1',
+          order: 1,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          labels: {
+            color: '#e8e8f0',
+            font: { family: 'Space Mono, monospace', size: 12 },
+            boxWidth: 24, padding: 20,
+          }
+        },
+        tooltip: {
+          backgroundColor: '#13131a',
+          borderColor: '#1e1e2e',
+          borderWidth: 1,
+          titleColor: '#5a5a7a',
+          bodyColor: '#e8e8f0',
+          callbacks: {
+            title: function(items) {
+              return new Date(items[0].parsed.x).toLocaleDateString('zh-CN');
+            },
+            label: function(ctx) {
+              if (ctx.datasetIndex === 0) {
+                var v = ctx.parsed.y;
+                return ' 恐惧贪婪指数: ' + v + '（' + fngLabel(v) + '）';
+              }
+              if (ctx.parsed.y === null) return null;
+              return ' BTC 价格: $' + ctx.parsed.y.toLocaleString('en-US', {maximumFractionDigits: 0});
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: 'time',
+          time: { unit: 'year' },
+          ticks: { color: '#5a5a7a', font: { family: 'Space Mono, monospace' } },
+          grid:  { color: '#1e1e2e' },
+          barPercentage: 1.0,
+          categoryPercentage: 1.0,
+        },
+        y: {
+          position: 'left',
+          min: 0, max: 100,
+          ticks: {
+            color: '#5a5a7a',
+            font: { family: 'Space Mono, monospace' },
+            callback: function(v) {
+              var map = { 0:'0', 25:'25', 50:'50', 75:'75', 100:'100' };
+              return map[v] !== undefined ? map[v] : '';
+            }
+          },
+          grid: { color: '#1e1e2e' },
+        },
+        y1: {
+          position: 'right',
+          type: 'logarithmic',
+          ticks: {
+            color: '#f7b731',
+            font: { family: 'Space Mono, monospace' },
+            callback: function(v) {
+              var neat = [1000, 5000, 10000, 50000, 100000];
+              return neat.indexOf(v) >= 0 ? '$' + v.toLocaleString() : '';
+            }
+          },
+          grid: { drawOnChartArea: false },
+        }
+      }
+    }
+  });
+}
 
   if (fngChart) fngChart.destroy();
 
