@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DCA 投资模拟</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131a;
+    --border: #1e1e2e;
+    --gold: #f7b731;
+    --gold-dim: #a07820;
+    --green: #26de81;
+    --red: #fc5c65;
+    --blue: #74b9ff;
+    --purple: #a29bfe;
+    --text: #e8e8f0;
+    --muted: #5a5a7a;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 999;
+  }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 24px 40px; border-bottom: 1px solid var(--border);
+  }
+
+  .logo { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+  .btc-icon {
+    width: 40px; height: 40px; background: var(--gold);
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-weight: 800; color: #000; font-size: 18px;
+    box-shadow: 0 0 20px rgba(247,183,49,0.4);
+  }
+  .logo-text { font-size: 20px; font-weight: 800; letter-spacing: 0.05em; color: var(--text); }
+  .logo-text span { color: var(--gold); }
+
+  .back-btn {
+    display: flex; align-items: center; gap: 8px;
+    font-family: 'Space Mono', monospace; font-size: 12px;
+    color: var(--muted); text-decoration: none;
+    border: 1px solid var(--border); padding: 6px 14px;
+    border-radius: 20px; transition: all 0.2s;
+  }
+  .back-btn:hover { color: var(--gold); border-color: var(--gold-dim); }
+
+  .main { padding: 32px 40px; max-width: 1400px; margin: 0 auto; }
+
+  /* Page title */
+  .page-title {
+    margin-bottom: 32px;
+  }
+  .page-title h1 {
+    font-size: 32px; font-weight: 800; margin-bottom: 8px;
+  }
+  .page-title h1 span { color: var(--gold); }
+  .page-title p {
+    font-size: 14px; color: var(--muted); line-height: 1.7;
+  }
+
+  /* Controls */
+  .controls {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 24px 28px; margin-bottom: 28px;
+  }
+  .controls-title {
+    font-size: 12px; letter-spacing: 0.15em; text-transform: uppercase;
+    color: var(--muted); font-family: 'Space Mono', monospace; margin-bottom: 20px;
+  }
+  .controls-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 20px; align-items: end;
+  }
+  .control-group label {
+    display: block; font-size: 11px; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--muted);
+    font-family: 'Space Mono', monospace; margin-bottom: 8px;
+  }
+  .control-group input, .control-group select {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); font-family: 'Space Mono', monospace; font-size: 14px;
+    padding: 10px 14px; border-radius: 8px; outline: none; transition: border-color 0.2s;
+  }
+  .control-group input:focus,
+  .control-group select:focus { border-color: var(--gold); }
+  .control-group select option { background: var(--surface); }
+
+  .run-btn {
+    background: var(--gold); color: #000;
+    font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700;
+    border: none; padding: 11px 28px; border-radius: 8px;
+    cursor: pointer; transition: all 0.15s; letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+  .run-btn:hover { background: #ffc840; transform: translateY(-1px); }
+
+  /* Stats grid */
+  .stats-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 14px; margin-bottom: 28px;
+  }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px 22px;
+    position: relative; overflow: hidden; transition: border-color 0.2s;
+  }
+  .stat-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; opacity: 0.7;
+  }
+  .stat-card.c-gold::before   { background: var(--gold); }
+  .stat-card.c-blue::before   { background: var(--blue); }
+  .stat-card.c-green::before  { background: var(--green); }
+  .stat-card.c-purple::before { background: var(--purple); }
+  .stat-card.c-red::before    { background: var(--red); }
+
+  .stat-label {
+    font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase;
+    color: var(--muted); font-family: 'Space Mono', monospace; margin-bottom: 8px;
+  }
+  .stat-value { font-size: 22px; font-weight: 700; font-family: 'Space Mono', monospace; }
+  .stat-sub   { font-size: 11px; color: var(--muted); font-family: 'Space Mono', monospace; margin-top: 4px; }
+
+  /* Chart */
+  .chart-wrap {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 24px; margin-bottom: 20px;
+  }
+  .chart-label {
+    font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--muted); font-family: 'Space Mono', monospace; margin-bottom: 16px;
+  }
+  #dcaChart { width: 100%; height: 420px; display: block; }
+
+  /* Status */
+  .status-bar {
+    font-family: 'Space Mono', monospace; font-size: 12px; color: var(--muted);
+    margin-bottom: 20px; display: flex; align-items: center; gap: 8px;
+  }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+  .status-dot.loading { background: var(--gold); animation: pulse 1s infinite; }
+  .status-dot.ready   { background: var(--green); }
+  .status-dot.error   { background: var(--red); }
+  @keyframes pulse {
+    0%,100% { opacity:1; transform:scale(1); }
+    50%      { opacity:0.4; transform:scale(0.8); }
+  }
+
+  /* Note */
+  .note {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 20px;
+    font-family: 'Space Mono', monospace; font-size: 11px;
+    color: var(--muted); line-height: 1.9;
+  }
+  .note strong { color: var(--text); }
+
+  @media (max-width: 900px) {
+    .controls-grid { grid-template-columns: 1fr 1fr; }
+    .stats-grid    { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 600px) {
+    header, .main { padding: 16px 20px; }
+    .controls-grid { grid-template-columns: 1fr; }
+    .stats-grid    { grid-template-columns: 1fr 1fr; }
+    .stat-value    { font-size: 18px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <a class="logo" href="bitcoin-dashboard.html">
+    <div class="btc-icon">&#8383;</div>
+    <div class="logo-text">BTC <span>Dashboard</span></div>
+  </a>
+  <a class="back-btn" href="bitcoin-dashboard.html">&#8592; 返回仪表板</a>
+</header>
+
+<div class="main">
+
+  <div class="page-title">
+    <h1>DCA <span>投资模拟</span></h1>
+    <p>定期定额（Dollar-Cost Averaging）回测 &mdash; 模拟从指定日期起，每周固定投入一笔资金买入 BTC 的历史结果。</p>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <div class="controls-title">模拟参数</div>
+    <div class="controls-grid">
+      <div class="control-group">
+        <label>每次投入金额（USD）</label>
+        <input type="number" id="amount" value="20" min="1" step="1">
+      </div>
+      <div class="control-group">
+        <label>投资星期</label>
+        <select id="weekday">
+          <option value="1">周一</option>
+          <option value="2">周二</option>
+          <option value="3">周三</option>
+          <option value="4" selected>周四</option>
+          <option value="5">周五</option>
+          <option value="6">周六</option>
+          <option value="0">周日</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>开始日期</label>
+        <input type="date" id="startDate" value="2013-01-01">
+      </div>
+      <div class="control-group">
+        <label>结束日期</label>
+        <input type="date" id="endDate" value="2026-02-20">
+      </div>
+    </div>
+    <div style="margin-top:20px">
+      <button class="run-btn" onclick="runSimulation()">&#9654; 运行模拟</button>
+    </div>
+  </div>
+
+  <!-- Status -->
+  <div class="status-bar">
+    <div class="status-dot loading" id="statusDot"></div>
+    <span id="statusText">正在加载 CSV 数据...</span>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat-card c-gold">
+      <div class="stat-label">累计投入</div>
+      <div class="stat-value" id="s-invested">--</div>
+      <div class="stat-sub" id="s-times">-- 次买入</div>
+    </div>
+    <div class="stat-card c-blue">
+      <div class="stat-label">累计持有 BTC</div>
+      <div class="stat-value" id="s-btc">--</div>
+      <div class="stat-sub" id="s-avgcost">均价 --</div>
+    </div>
+    <div class="stat-card c-green">
+      <div class="stat-label">当前持仓市值</div>
+      <div class="stat-value" id="s-value">--</div>
+      <div class="stat-sub" id="s-price">参考价 --</div>
+    </div>
+    <div class="stat-card c-purple">
+      <div class="stat-label">总收益率</div>
+      <div class="stat-value" id="s-roi">--</div>
+      <div class="stat-sub" id="s-profit">盈亏 --</div>
+    </div>
+  </div>
+
+  <!-- Chart -->
+  <div class="chart-wrap">
+    <div class="chart-label">资产增长曲线</div>
+    <canvas id="dcaChart"></canvas>
+  </div>
+
+  <div class="note">
+    <strong>数据来源：</strong>本地 btc_history.csv（CoinGecko 下载），每天收盘价作为买入价格。<br>
+    <strong>跳过规则：</strong>若该星期几在 CSV 中无数据（节假日或早期缺失），则跳过该周，不补买。<br>
+    <strong>注意：</strong>本模拟仅为历史回测，过去收益不代表未来表现，不构成投资建议。
+  </div>
+
+</div>
+
+<script>
+// ── 全局数据 ────────────────────────────────────────
+var priceMap  = {};   // "YYYY-MM-DD" → 收盘价
+var dataReady = false;
+var dcaChart  = null;
+
+// ── 加载 CSV ────────────────────────────────────────
+function setStatus(state, text) {
+  document.getElementById('statusDot').className  = 'status-dot ' + state;
+  document.getElementById('statusText').textContent = text;
+}
+
+fetch('btc_history.csv')
+  .then(function(r) { return r.text(); })
+  .then(function(csvText) {
+    var lines = csvText.trim().split('\n');
+    for (var i = 1; i < lines.length; i++) {
+      var cols  = lines[i].split(',');
+      var price = parseFloat(cols[1]);
+      if (!price) continue;
+      priceMap[cols[0].substring(0, 10)] = price;
+    }
+    dataReady = true;
+    setStatus('ready', 'CSV 数据就绪，共 ' + Object.keys(priceMap).length + ' 天 — 可以运行模拟');
+    runSimulation();  // 页面加载完自动跑一次默认参数
+  })
+  .catch(function() {
+    setStatus('error', '❌ 加载失败：请确认 btc_history.csv 在同一文件夹，并通过 Python 服务器访问');
+  });
+
+// ── 核心模拟 ────────────────────────────────────────
+function runSimulation() {
+  if (!dataReady) { setStatus('loading', '数据还在加载，请稍候...'); return; }
+
+  var amount    = parseFloat(document.getElementById('amount').value)   || 20;
+  var weekday   = parseInt(document.getElementById('weekday').value);
+  var startDate = new Date(document.getElementById('startDate').value);
+  var endDate   = new Date(document.getElementById('endDate').value);
+
+  if (startDate >= endDate) {
+    setStatus('error', '❌ 开始日期必须早于结束日期'); return;
+  }
+
+  var totalInvested = 0;
+  var totalBTC      = 0;
+  var tradeCount    = 0;
+  var skipped       = 0;
+
+  // 图表数据点：每次买入后记录一次
+  var chartDates    = [];
+  var chartInvested = [];  // 累计投入（成本线）
+  var chartValue    = [];  // 当时市值线
+
+  var current = new Date(startDate);
+  while (current <= endDate) {
+    if (current.getDay() === weekday) {
+      var dateStr = current.toISOString().substring(0, 10);
+      var price   = priceMap[dateStr];
+      if (price) {
+        totalBTC      += amount / price;
+        totalInvested += amount;
+        tradeCount++;
+        chartDates.push(new Date(current));
+        chartInvested.push(Math.round(totalInvested));
+        chartValue.push(Math.round(totalBTC * price));
+      } else {
+        skipped++;
+      }
+    }
+    current.setDate(current.getDate() + 1);
+  }
+
+  if (tradeCount === 0) {
+    setStatus('error', '❌ 在选定时间范围内找不到任何交易日，请调整参数'); return;
+  }
+
+  // 用最后一笔的价格作为当前参考价
+  var lastDateStr  = chartDates[chartDates.length - 1].toISOString().substring(0, 10);
+  var latestPrice  = priceMap[lastDateStr];
+  var currentValue = totalBTC * latestPrice;
+  var profit       = currentValue - totalInvested;
+  var roi          = (profit / totalInvested) * 100;
+  var avgCost      = totalInvested / totalBTC;
+  var isProfit     = profit >= 0;
+
+  // ── 更新统计卡片 ──────────────────────────────────
+  document.getElementById('s-invested').textContent =
+    '$' + totalInvested.toLocaleString('en-US', {maximumFractionDigits: 0});
+  document.getElementById('s-times').textContent =
+    tradeCount + ' 次买入（跳过 ' + skipped + ' 次）';
+
+  document.getElementById('s-btc').textContent =
+    totalBTC.toFixed(6) + ' BTC';
+  document.getElementById('s-avgcost').textContent =
+    '均价 $' + avgCost.toLocaleString('en-US', {maximumFractionDigits: 2});
+
+  document.getElementById('s-value').textContent =
+    '$' + currentValue.toLocaleString('en-US', {maximumFractionDigits: 0});
+  document.getElementById('s-price').textContent =
+    '参考价 $' + latestPrice.toLocaleString('en-US', {maximumFractionDigits: 2});
+
+  var roiEl = document.getElementById('s-roi');
+  roiEl.textContent = (isProfit ? '+' : '') + roi.toFixed(1) + '%';
+  roiEl.style.color = isProfit ? 'var(--green)' : 'var(--red)';
+  document.getElementById('s-profit').textContent =
+    '盈亏 ' + (isProfit ? '+' : '') + '$' + profit.toLocaleString('en-US', {maximumFractionDigits: 0});
+
+  setStatus('ready',
+    '✅ 模拟完成 — ' + tradeCount + ' 笔买入，' +
+    startDate.toLocaleDateString('zh-CN') + ' → ' +
+    endDate.toLocaleDateString('zh-CN')
+  );
+
+  // ── 画图 ──────────────────────────────────────────
+  drawChart(chartDates, chartInvested, chartValue);
+}
+
+function drawChart(dates, invested, value) {
+  if (dcaChart) { dcaChart.destroy(); }
+
+  var investedData = dates.map(function(d, i) { return { x: d, y: invested[i] }; });
+  var valueData    = dates.map(function(d, i) { return { x: d, y: value[i] }; });
+
+  var ctx = document.getElementById('dcaChart').getContext('2d');
+  dcaChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      datasets: [
+        {
+          label: '持仓市值',
+          data: valueData,
+          borderColor: '#26de81',
+          backgroundColor: 'rgba(38,222,129,0.08)',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.2,
+          fill: false,
+        },
+        {
+          label: '累计投入成本',
+          data: investedData,
+          borderColor: '#f7b731',
+          backgroundColor: 'rgba(247,183,49,0.06)',
+          borderWidth: 1.5,
+          pointRadius: 0,
+          tension: 0.1,
+          borderDash: [5, 3],
+          fill: false,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          labels: {
+            color: '#e8e8f0',
+            font: { family: 'Space Mono, monospace', size: 12 },
+            boxWidth: 24, padding: 20,
+          }
+        },
+        tooltip: {
+          backgroundColor: '#13131a',
+          borderColor: '#1e1e2e',
+          borderWidth: 1,
+          titleColor: '#5a5a7a',
+          bodyColor: '#e8e8f0',
+          callbacks: {
+            title: function(items) {
+              return new Date(items[0].parsed.x).toLocaleDateString('zh-CN');
+            },
+            label: function(ctx) {
+              return ' ' + ctx.dataset.label + ': $' + ctx.parsed.y.toLocaleString();
+            },
+            afterBody: function(items) {
+              // 在tooltip里额外显示当时的盈亏
+              var val  = items[0].parsed.y;
+              var cost = items[1].parsed.y;
+              var diff = val - cost;
+              var pct  = ((diff / cost) * 100).toFixed(1);
+              return ['', (diff >= 0 ? '▲ 盈利 +$' : '▼ 亏损 $') +
+                Math.abs(diff).toLocaleString('en-US', {maximumFractionDigits: 0}) +
+                '  (' + (diff >= 0 ? '+' : '') + pct + '%)'];
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: 'time',
+          time: { unit: 'year' },
+          ticks: { color: '#5a5a7a', font: { family: 'Space Mono, monospace' } },
+          grid:  { color: '#1e1e2e' },
+        },
+        y: {
+          position: 'right',
+          ticks: {
+            color: '#5a5a7a',
+            font: { family: 'Space Mono, monospace' },
+            callback: function(v) {
+              if (v >= 1000000) return '$' + (v/1000000).toFixed(1) + 'M';
+              if (v >= 1000)    return '$' + (v/1000).toFixed(0) + 'K';
+              return '$' + v;
+            }
+          },
+          grid: { color: '#1e1e2e' },
+        }
+      }
+    }
+  });
+}
+</script>
+</body>
+</html>
