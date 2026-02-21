@@ -17,6 +17,7 @@ var NAV_ITEMS = {
   indicators: [
     { key: 'cvdd',  label: 'CVDD',              file: 'bitcoin-dashboard.html#cvdd' },
     { key: '2yma',  label: '2-Year MA',          file: '2yma.html' },
+    { key: '200wma', label: '200W MA Heatmap', file: '200wma.html' },
     // 在这里继续添加指标页面 ↓
   ],
   tools: [
