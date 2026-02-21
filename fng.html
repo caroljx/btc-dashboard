@@ -453,7 +453,7 @@ function drawChart(fngData, priceData) {
 // ── 主流程 ──────────────────────────────────────────
 Promise.all([
   // 拿所有历史 Fear & Greed 数据
-  fetch('https://api.alternative.me/fng/?limit=0&date_format=us')
+  fetch('https://api.alternative.me/fng/?limit=0')
     .then(function(r) { return r.json(); }),
   // 拿近365天的BTC价格（用于图表右轴）
   fetch('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=365&interval=daily')
