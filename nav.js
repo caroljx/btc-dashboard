@@ -16,9 +16,9 @@
 var NAV_ITEMS = {
   indicators: [
     { key: 'cvdd',  label: 'CVDD',              file: 'bitcoin-dashboard.html#cvdd' },
-    { key: '2yma',  label: '2-Year MA',          file: '2yma.html' },
-    { key: '200wma', label: '200W MA Heatmap', file: '200wma.html' },
-    { key: 'fng', label: 'Fear & Greed', file: 'fng.html' },
+    { key: '2yma',  label: '2年移动平均线乘数',          file: '2yma.html' },
+    { key: '200wma', label: '200周移动平均线热力图', file: '200wma.html' },
+    { key: 'fng', label: '恐惧与贪婪指数', file: 'fng.html' },
     // 在这里继续添加指标页面 ↓
   ],
   tools: [
