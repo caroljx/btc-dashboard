@@ -19,6 +19,7 @@ var NAV_ITEMS = {
     { key: '2yma',  label: '2年移动平均线乘数',          file: '2yma.html' },
     { key: '200wma', label: '200周移动平均线热力图', file: '200wma.html' },
     { key: 'fng', label: '恐惧与贪婪指数', file: 'fng.html' },
+    { key: 'profitable-days', label: '盈利天数', file: 'profitable-days.html' },
     // 在这里继续添加指标页面 ↓
   ],
   tools: [
