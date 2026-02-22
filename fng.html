@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>恐惧与贪婪指数 — BTC Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="nav.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f; --surface: #13131a; --border: #1e1e2e;
+    --gold: #f7b731; --green: #26de81; --red: #fc5c65;
+    --blue: #74b9ff; --text: #e8e8f0; --muted: #5a5a7a;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; min-height: 100vh; /* overflow-x: hidden; removed for sidebar layout */ }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 999;
+  }
+  .main { padding: 32px 40px; max-width: 1400px; margin: 0 auto; }
+  .page-title { margin-bottom: 28px; }
+  .page-title h1 { font-size: 30px; font-weight: 800; margin-bottom: 8px; }
+  .page-title h1 span { color: var(--gold); }
+  .page-title p { font-size: 14px; color: var(--muted); line-height: 1.8; max-width: 700px; }
+  .page-title p strong { color: var(--text); }
+
+  .gauge-row { display: flex; align-items: center; gap: 32px; margin-bottom: 28px; flex-wrap: wrap; }
+  .gauge-wrap {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 28px 36px;
+    display: flex; flex-direction: column; align-items: center; min-width: 220px;
+  }
+  .gauge-value { font-size: 72px; font-weight: 800; font-family: 'Space Mono', monospace; line-height: 1; }
+  .gauge-label { font-size: 16px; font-weight: 700; margin-top: 8px; font-family: 'Space Mono', monospace; }
+  .gauge-sub { font-size: 11px; color: var(--muted); font-family: 'Space Mono', monospace; margin-top: 6px; }
+
+  .fng-bar-wrap { flex: 1; min-width: 280px; }
+  .fng-bar-title { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 10px; }
+  .fng-bar {
+    height: 14px; border-radius: 7px;
+    background: linear-gradient(90deg, #c0392b 0%, #e67e22 25%, #f1c40f 50%, #2ecc71 75%, #27ae60 100%);
+    position: relative; margin-bottom: 6px;
+  }
+  .fng-needle {
+    position: absolute; top: -5px; width: 4px; height: 24px;
+    background: white; border-radius: 2px; transform: translateX(-50%);
+    box-shadow: 0 0 6px rgba(0,0,0,0.5); transition: left 0.8s ease;
+  }
+  .fng-bar-ticks { display: flex; justify-content: space-between; font-family: 'Space Mono', monospace; font-size: 10px; color: var(--muted); }
+
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 22px; position: relative; overflow: hidden; }
+  .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; opacity: 0.8; }
+  .stat-card.c-gold::before  { background: var(--gold); }
+  .stat-card.c-blue::before  { background: var(--blue); }
+  .stat-card.c-green::before { background: var(--green); }
+  .stat-card.c-red::before   { background: var(--red); }
+  .stat-label { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); font-family: 'Space Mono', monospace; margin-bottom: 8px; }
+  .stat-value { font-size: 20px; font-weight: 700; font-family: 'Space Mono', monospace; }
+  .stat-sub   { font-size: 11px; color: var(--muted); font-family: 'Space Mono', monospace; margin-top: 4px; }
+
+  .chart-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 20px; height: 420px; overflow: hidden; }
+  .chart-label { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-family: 'Space Mono', monospace; margin-bottom: 16px; }
+  #fngChart { width: 100%; height: 340px; display: block; }
+
+  .status-bar { font-family: 'Space Mono', monospace; font-size: 12px; color: var(--muted); margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .status-dot.loading { background: var(--gold); animation: pulse 1s infinite; }
+  .status-dot.ready   { background: var(--green); }
+  .status-dot.error   { background: var(--red); }
+  @keyframes pulse { 0%,100%{ opacity:1; transform:scale(1); } 50%{ opacity:0.4; transform:scale(0.8); } }
+
+  .note { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 20px; font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted); line-height: 1.9; }
+  .note strong { color: var(--text); }
+  .note a { color: var(--gold); text-decoration: none; }
+
+  @media (max-width: 900px) { .stats-grid { grid-template-columns: 1fr 1fr; } .gauge-value { font-size: 52px; } }
+  @media (max-width: 600px) { .main { padding: 16px 20px; } .stats-grid { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+
+<div id="nav-root"></div>
+
+<div class="main">
+  <div class="page-title">
+    <h1>恐惧与贪婪 <span>指数</span></h1>
+    <p>
+      比特币市场情绪指标，综合<strong>波动率、市场动量、社交媒体、市场主导率、Google趋势</strong>等数据，
+      将市场情绪压缩成 0～100 的单一数值。
+      <strong>极度恐惧</strong>时往往是历史买入机会，<strong>极度贪婪</strong>时市场往往过热。
+    </p>
+  </div>
+
+  <div class="gauge-row">
+    <div class="gauge-wrap">
+      <div class="gauge-value" id="gaugeValue" style="color:#f1c40f">--</div>
+      <div class="gauge-label" id="gaugeLabel" style="color:#f1c40f">计算中</div>
+      <div class="gauge-sub">今日数据</div>
+    </div>
+    <div class="fng-bar-wrap">
+      <div class="fng-bar-title">情绪色带（0 = 极度恐惧，100 = 极度贪婪）</div>
+      <div class="fng-bar">
+        <div class="fng-needle" id="fngNeedle" style="left:50%"></div>
+      </div>
+      <div class="fng-bar-ticks">
+        <span>0 极度恐惧</span><span>25 恐惧</span><span>50 中性</span><span>75 贪婪</span><span>100 极度贪婪</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card c-gold">
+      <div class="stat-label">今日指数</div>
+      <div class="stat-value" id="s-today">--</div>
+      <div class="stat-sub" id="s-today-label">--</div>
+    </div>
+    <div class="stat-card c-blue">
+      <div class="stat-label">昨日指数</div>
+      <div class="stat-value" id="s-yesterday">--</div>
+      <div class="stat-sub" id="s-yesterday-label">--</div>
+    </div>
+    <div class="stat-card c-green">
+      <div class="stat-label">上周同日</div>
+      <div class="stat-value" id="s-lastweek">--</div>
+      <div class="stat-sub" id="s-lastweek-label">--</div>
+    </div>
+    <div class="stat-card c-red">
+      <div class="stat-label">上月同日</div>
+      <div class="stat-value" id="s-lastmonth">--</div>
+      <div class="stat-sub" id="s-lastmonth-label">--</div>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <div class="status-dot loading" id="statusDot"></div>
+    <span id="statusText">正在加载数据...</span>
+  </div>
+
+  <div class="chart-wrap">
+    <div class="chart-label">历史恐惧与贪婪指数（2018年至今）</div>
+    <canvas id="fngChart"></canvas>
+  </div>
+
+  <div class="note">
+    <strong>数据来源：</strong>
+    <a href="https://alternative.me/crypto/fear-and-greed-index/" target="_blank">Alternative.me</a>
+    提供的免费 API，数据从 2018年2月起每日更新，可免费使用，需注明来源。<br>
+    <strong>计算维度：</strong>波动率（25%）、市场动量/成交量（25%）、社交媒体（15%）、
+    市场主导率（10%）、Google趋势（10%）、市场调查（15%，暂停中）。<br>
+    <strong>注意：</strong>情绪指标反映市场心理，不构成投资建议。
+  </div>
+</div>
+
+<script>
+renderNav('fng');
+
+var fngChart = null;
+
+// ── 工具函数 ────────────────────────────────────────
+function setStatus(state, text) {
+  document.getElementById('statusDot').className   = 'status-dot ' + state;
+  document.getElementById('statusText').textContent = text;
+}
+
+function fngColor(v) {
+  if (v <= 24) return '#c0392b';
+  if (v <= 44) return '#e67e22';
+  if (v <= 55) return '#f1c40f';
+  if (v <= 74) return '#2ecc71';
+  return '#27ae60';
+}
+
+function fngLabel(v) {
+  if (v <= 24) return '极度恐惧';
+  if (v <= 44) return '恐惧';
+  if (v <= 55) return '中性';
+  if (v <= 74) return '贪婪';
+  return '极度贪婪';
+}
+
+// ── 更新仪表盘 ───────────────────────────────────────
+function updateGauge(value) {
+  var color = fngColor(value);
+  document.getElementById('gaugeValue').textContent = value;
+  document.getElementById('gaugeValue').style.color = color;
+  document.getElementById('gaugeLabel').textContent = fngLabel(value);
+  document.getElementById('gaugeLabel').style.color = color;
+  document.getElementById('fngNeedle').style.left   = value + '%';
+}
+
+// ── 更新统计卡片 ────────────────────────────────────
+function updateStats(data) {
+  var pairs = [
+    { idx: 0,  valueId: 's-today',     labelId: 's-today-label'     },
+    { idx: 1,  valueId: 's-yesterday', labelId: 's-yesterday-label' },
+    { idx: 7,  valueId: 's-lastweek',  labelId: 's-lastweek-label'  },
+    { idx: 30, valueId: 's-lastmonth', labelId: 's-lastmonth-label' },
+  ];
+  pairs.forEach(function(p) {
+    var d = data[p.idx];
+    if (!d) return;
+    var v = parseInt(d.value);
+    document.getElementById(p.valueId).textContent = v;
+    document.getElementById(p.valueId).style.color = fngColor(v);
+    document.getElementById(p.labelId).textContent = fngLabel(v);
+  });
+}
+
+// ── 解析CSV → priceMap ──────────────────────────────
+function parseCSVtoPriceMap(text) {
+  var lines = text.trim().split('\n');
+  var map   = {};
+  for (var i = 1; i < lines.length; i++) {
+    var line  = lines[i].replace('\r', '');   // 去掉Windows换行符
+    var cols  = line.split(',');               // 用清理后的line，不是原始lines[i]
+    var price = parseFloat(cols[1]);
+    if (!price) continue;
+    map[cols[0].substring(0, 10)] = price;
+  }
+  return map;
+}
+
+// ── 解析CoinGecko API → priceMap ────────────────────
+function parseAPItoPriceMap(data) {
+  var map = {};
+  data.prices.forEach(function(p) {
+    var dateStr = new Date(p[0]).toISOString().substring(0, 10);
+    map[dateStr] = p[1];
+  });
+  return map;
+}
+
+// ── 画图 ─────────────────────────────────────────────
+function drawChart(fngData, priceMap) {
+  var labels     = fngData.map(function(d) { return new Date(parseInt(d.timestamp) * 1000); });
+  var fngValues  = fngData.map(function(d) { return parseInt(d.value); });
+  var barColors  = fngValues.map(function(v) { return fngColor(v) + 'cc'; });
+
+  var priceValues = fngData.map(function(d) {
+    var dateStr = new Date(parseInt(d.timestamp) * 1000).toISOString().substring(0, 10);
+    return priceMap[dateStr] || null;
+  });
+
+  if (fngChart) fngChart.destroy();
+
+  var ctx = document.getElementById('fngChart').getContext('2d');
+  fngChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: '恐惧与贪婪指数',
+          data: fngValues,
+          backgroundColor: barColors,
+          borderColor: 'transparent',
+          borderWidth: 0,
+          yAxisID: 'y',
+          order: 2,
+        },
+        {
+          label: 'BTC 价格',
+          data: priceValues,
+          type: 'line',
+          borderColor: '#f7b731',
+          backgroundColor: 'transparent',
+          borderWidth: 1.5,
+          pointRadius: 0,
+          tension: 0.2,
+          yAxisID: 'y1',
+          order: 1,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          labels: {
+            color: '#e8e8f0',
+            font: { family: 'Space Mono, monospace', size: 12 },
+            boxWidth: 24, padding: 20,
+          }
+        },
+        tooltip: {
+          backgroundColor: '#13131a',
+          borderColor: '#1e1e2e',
+          borderWidth: 1,
+          titleColor: '#5a5a7a',
+          bodyColor: '#e8e8f0',
+          callbacks: {
+            title: function(items) {
+              return new Date(items[0].parsed.x).toLocaleDateString('zh-CN');
+            },
+            label: function(ctx) {
+              if (ctx.datasetIndex === 0) {
+                var v = ctx.parsed.y;
+                return ' 恐惧贪婪指数: ' + v + '（' + fngLabel(v) + '）';
+              }
+              if (ctx.parsed.y === null) return null;
+              return ' BTC 价格: $' + ctx.parsed.y.toLocaleString('en-US', {maximumFractionDigits: 0});
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: 'time',
+          time: { unit: 'year' },
+          ticks: { color: '#5a5a7a', font: { family: 'Space Mono, monospace' } },
+          grid:  { color: '#1e1e2e' },
+          barPercentage: 1.0,
+          categoryPercentage: 1.0,
+        },
+        y: {
+          position: 'left',
+          min: 0, max: 100,
+          ticks: {
+            color: '#5a5a7a',
+            font: { family: 'Space Mono, monospace' },
+            callback: function(v) {
+              var m = { 0:'0', 25:'25', 50:'50', 75:'75', 100:'100' };
+              return m[v] !== undefined ? m[v] : '';
+            }
+          },
+          grid: { color: '#1e1e2e' },
+        },
+        y1: {
+          position: 'right',
+          type: 'logarithmic',
+          ticks: {
+            color: '#f7b731',
+            font: { family: 'Space Mono, monospace' },
+            callback: function(v) {
+              var neat = [1000, 5000, 10000, 50000, 100000];
+              return neat.indexOf(v) >= 0 ? '$' + v.toLocaleString() : '';
+            }
+          },
+          grid: { drawOnChartArea: false },
+        }
+      }
+    }
+  });
+}
+
+// ── 主流程 ──────────────────────────────────────────
+Promise.all([
+  fetch('https://api.alternative.me/fng/?limit=0')
+    .then(function(r) { return r.json(); }),
+  fetch('https://caroljx.github.io/btc-dashboard/btc_history.csv')
+    .then(function(r) { return r.text(); }),
+  fetch('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=365&interval=daily')
+    .then(function(r) { return r.json(); })
+])
+.then(function(results) {
+  var fngRaw = results[0].data;
+  if (!fngRaw || fngRaw.length === 0) {
+    setStatus('error', '❌ 恐惧与贪婪数据为空');
+    return;
+  }
+
+  var csvMap   = parseCSVtoPriceMap(results[1]);
+  var apiMap   = parseAPItoPriceMap(results[2]);
+
+  // 合并：CSV为基础，API覆盖最近365天
+  var priceMap = {};
+  Object.keys(csvMap).forEach(function(k) { priceMap[k] = csvMap[k]; });
+  Object.keys(apiMap).forEach(function(k) { priceMap[k] = apiMap[k]; });
+
+  // FNG数据反转成时间升序
+  var fngAsc = fngRaw.slice().reverse();
+
+  updateGauge(parseInt(fngRaw[0].value));
+  updateStats(fngRaw);
+
+  setStatus('ready',
+    '✅ 数据就绪 — 恐惧与贪婪 ' + fngRaw.length + ' 天 | ' +
+    'BTC价格 CSV ' + Object.keys(csvMap).length + ' 天 + API ' +
+    Object.keys(apiMap).length + ' 天合并'
+  );
+
+  drawChart(fngAsc, priceMap);
+})
+.catch(function(err) {
+  setStatus('error', '❌ 加载失败：' + err.message);
+});
+</script>
+</body>
+</html>

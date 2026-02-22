@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>比特币幂律模型 — BTC Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="nav.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f; --surface: #13131a; --border: #1e1e2e;
+    --gold: #f7b731; --green: #26de81; --red: #fc5c65;
+    --blue: #74b9ff; --purple: #a29bfe; --text: #e8e8f0; --muted: #5a5a7a;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; min-height: 100vh; /* overflow-x: hidden; removed for sidebar layout */ }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 999;
+  }
+  .main { padding: 32px 40px; max-width: 1400px; margin: 0 auto; }
+
+  .page-title { margin-bottom: 28px; }
+  .page-title h1 { font-size: 30px; font-weight: 800; margin-bottom: 8px; }
+  .page-title h1 span { color: var(--gold); }
+  .page-title p { font-size: 14px; color: var(--muted); line-height: 1.8; max-width: 720px; }
+  .page-title p strong { color: var(--text); }
+
+  /* stats */
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 22px; position: relative; overflow: hidden; }
+  .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; opacity: 0.8; }
+  .stat-card.c-gold::before   { background: var(--gold); }
+  .stat-card.c-blue::before   { background: var(--blue); }
+  .stat-card.c-green::before  { background: var(--green); }
+  .stat-card.c-red::before    { background: var(--red); }
+  .stat-card.c-purple::before { background: var(--purple); }
+  .stat-label { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); font-family: 'Space Mono', monospace; margin-bottom: 8px; }
+  .stat-value { font-size: 18px; font-weight: 700; font-family: 'Space Mono', monospace; }
+  .stat-sub   { font-size: 11px; color: var(--muted); font-family: 'Space Mono', monospace; margin-top: 4px; }
+
+  /* 当前位置信号 */
+  .signal-badge {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 12px 20px; border-radius: 10px; margin-bottom: 24px;
+    font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+
+  /* legend */
+  .legend-row { display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 16px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted); }
+  .legend-line { width: 28px; height: 3px; border-radius: 2px; }
+
+  /* chart */
+  .chart-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 20px; height: 500px; overflow: hidden; }
+  .chart-label { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-family: 'Space Mono', monospace; margin-bottom: 16px; }
+  #plChart { width: 100%; height: 420px; display: block; }
+
+  /* status */
+  .status-bar { font-family: 'Space Mono', monospace; font-size: 12px; color: var(--muted); margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .status-dot.loading { background: var(--gold); animation: pulse 1s infinite; }
+  .status-dot.ready   { background: var(--green); }
+  .status-dot.error   { background: var(--red); }
+  @keyframes pulse { 0%,100%{ opacity:1; transform:scale(1); } 50%{ opacity:0.4; transform:scale(0.8); } }
+
+  /* note */
+  .note { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 20px; font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted); line-height: 1.9; }
+  .note strong { color: var(--text); }
+
+  @media (max-width: 900px) { .stats-grid { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 600px) { .main { padding: 16px 20px; } .stats-grid { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+
+<div id="nav-root"></div>
+
+<div class="main">
+  <div class="page-title">
+    <h1>比特币 <span>幂律模型</span></h1>
+    <p>
+      <strong>幂律（Power Law）</strong>模型认为，比特币价格与时间之间存在幂函数关系。
+      在双对数坐标下，价格走势近似一条直线，由历史数据回归拟合而成。
+      图表包含<strong>中心回归线</strong>（长期公允价值）、
+      <strong>上边界</strong>（历史过热区）和<strong>下边界</strong>（历史低估区），
+      并延伸至2035年作为长期参考。
+    </p>
+  </div>
+
+  <!-- 信号徽章 -->
+  <div class="signal-badge" id="signalBadge">⏳ 计算中...</div>
+
+  <!-- Stats -->
+  <div class="stats-grid">
+    <div class="stat-card c-gold">
+      <div class="stat-label">今日价格</div>
+      <div class="stat-value" id="s-price" style="color:var(--gold)">--</div>
+      <div class="stat-sub">Binance 实时</div>
+    </div>
+    <div class="stat-card c-blue">
+      <div class="stat-label">中心回归线（今日）</div>
+      <div class="stat-value" id="s-center" style="color:var(--blue)">--</div>
+      <div class="stat-sub">幂律长期公允价值</div>
+    </div>
+    <div class="stat-card c-green">
+      <div class="stat-label">下边界（今日）</div>
+      <div class="stat-value" id="s-lower" style="color:var(--green)">--</div>
+      <div class="stat-sub">历史支撑/低估区</div>
+    </div>
+    <div class="stat-card c-red">
+      <div class="stat-label">上边界（今日）</div>
+      <div class="stat-value" id="s-upper" style="color:var(--red)">--</div>
+      <div class="stat-sub">历史阻力/过热区</div>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend-row">
+    <div class="legend-item">
+      <div class="legend-line" style="background:#f7b731"></div>BTC 价格
+    </div>
+    <div class="legend-item">
+      <div class="legend-line" style="background:#74b9ff"></div>中心回归线
+    </div>
+    <div class="legend-item">
+      <div class="legend-line" style="background:#fc5c65;opacity:0.7"></div>上边界
+    </div>
+    <div class="legend-item">
+      <div class="legend-line" style="background:#26de81;opacity:0.7"></div>下边界
+    </div>
+  </div>
+
+  <!-- Status -->
+  <div class="status-bar">
+    <div class="status-dot loading" id="statusDot"></div>
+    <span id="statusText">正在加载数据并拟合回归...</span>
+  </div>
+
+  <!-- Chart -->
+  <div class="chart-wrap">
+    <div class="chart-label">比特币幂律模型（双对数坐标，延伸至2035年）</div>
+    <canvas id="plChart"></canvas>
+  </div>
+
+  <div class="note">
+    <strong>计算方法：</strong>
+    以2009年1月3日（创世块）为起点，对历史每日收盘价做最小二乘法双对数线性回归：
+    log₁₀(price) = a × log₁₀(days) + b，从数据中自动拟合系数 a 和 b。<br>
+    <strong>边界划分：</strong>上边界 = 回归价格 × 上倍数，下边界 = 回归价格 × 下倍数，
+    倍数由历史价格峰谷相对回归线的偏差确定。<br>
+    <strong>数据来源：</strong>历史价格来自 btc_history.csv，今日实时价格来自 Binance API。<br>
+    <strong>注意：</strong>幂律模型假设比特币持续增长，不保证未来继续遵循历史规律，不构成投资建议。
+  </div>
+</div>
+
+<script>
+renderNav('power-law');
+
+var plChart   = null;
+var GENESIS   = new Date('2009-01-03');  // 比特币创世块日期
+
+function setStatus(state, text) {
+  document.getElementById('statusDot').className    = 'status-dot ' + state;
+  document.getElementById('statusText').textContent = text;
+}
+
+// ── 工具：计算距创世块的天数 ─────────────────────────
+function daysSinceGenesis(date) {
+  return Math.max(1, (date - GENESIS) / (1000 * 60 * 60 * 24));
+}
+
+// ── 解析CSV ──────────────────────────────────────────
+function parseCSV(text) {
+  var lines = text.trim().split('\n');
+  var days  = [];
+  for (var i = 1; i < lines.length; i++) {
+    var line  = lines[i].replace('\r', '');
+    var cols  = line.split(',');
+    var price = parseFloat(cols[1]);
+    if (!price || price <= 0) continue;
+    days.push({ date: new Date(cols[0]), price: price });
+  }
+  return days;
+}
+
+// ── 最小二乘法双对数线性回归 ─────────────────────────
+//
+// 在 log-log 空间做线性回归：
+//   Y = log10(price),  X = log10(days)
+//   拟合: Y = a * X + b
+//
+// 最小二乘解：
+//   a = (n*ΣXY - ΣX*ΣY) / (n*ΣX² - (ΣX)²)
+//   b = (ΣY - a*ΣX) / n
+
+function fitPowerLaw(days) {
+  var n = days.length;
+  var sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+
+  days.forEach(function(d) {
+    var x = Math.log10(daysSinceGenesis(d.date));
+    var y = Math.log10(d.price);
+    sumX  += x;
+    sumY  += y;
+    sumXY += x * y;
+    sumX2 += x * x;
+  });
+
+  var a = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+  var b = (sumY - a * sumX) / n;
+
+  return { a: a, b: b };
+}
+
+// ── 根据回归系数计算某天的预测价格 ──────────────────
+function regressionPrice(date, a, b) {
+  var x = Math.log10(daysSinceGenesis(date));
+  return Math.pow(10, a * x + b);
+}
+
+// ── 根据历史偏差确定上下边界倍数 ────────────────────
+//
+// 遍历所有历史数据，找出 price/regressionPrice 的最大值和最小值
+// 上倍数 = 历史最大比值（适当取90百分位避免极端噪音）
+// 下倍数 = 历史最小比值
+
+function calcBandMultipliers(days, a, b) {
+  var ratios = days.map(function(d) {
+    return d.price / regressionPrice(d.date, a, b);
+  });
+  ratios.sort(function(x, y) { return x - y; });
+
+  // 取90百分位作为上边界（避免极端噪音），取10百分位作为下边界
+  var upperIdx = Math.floor(ratios.length * 0.90);
+  var lowerIdx = Math.floor(ratios.length * 0.10);
+
+  return {
+    upper: ratios[upperIdx],
+    lower: ratios[lowerIdx],
+  };
+}
+
+// ── 更新统计卡片 ─────────────────────────────────────
+function updateStats(todayPrice, a, b, mult) {
+  var today   = new Date();
+  var center  = regressionPrice(today, a, b);
+  var upper   = center * mult.upper;
+  var lower   = center * mult.lower;
+  var ratio   = todayPrice / center;
+
+  document.getElementById('s-price').textContent  = '$' + todayPrice.toLocaleString('en-US', {maximumFractionDigits: 0});
+  document.getElementById('s-center').textContent = '$' + center.toLocaleString('en-US', {maximumFractionDigits: 0});
+  document.getElementById('s-upper').textContent  = '$' + upper.toLocaleString('en-US', {maximumFractionDigits: 0});
+  document.getElementById('s-lower').textContent  = '$' + lower.toLocaleString('en-US', {maximumFractionDigits: 0});
+
+  // 信号徽章
+  var badge  = document.getElementById('signalBadge');
+  var signal, bgColor, textColor;
+
+  if (todayPrice < lower) {
+    signal    = '🟢 价格低于下边界 — 历史极度低估区';
+    bgColor   = 'rgba(38,222,129,0.12)';
+    textColor = '#26de81';
+  } else if (todayPrice > upper) {
+    signal    = '🔴 价格高于上边界 — 历史过热区';
+    bgColor   = 'rgba(252,92,101,0.12)';
+    textColor = '#fc5c65';
+  } else if (ratio < 1) {
+    signal    = '🔵 价格低于中心线 — 低估区间（' + ratio.toFixed(2) + 'x）';
+    bgColor   = 'rgba(116,185,255,0.12)';
+    textColor = '#74b9ff';
+  } else {
+    signal    = '🟡 价格高于中心线 — 高估区间（' + ratio.toFixed(2) + 'x）';
+    bgColor   = 'rgba(247,183,49,0.12)';
+    textColor = '#f7b731';
+  }
+
+  badge.textContent           = signal;
+  badge.style.background      = bgColor;
+  badge.style.color           = textColor;
+  badge.style.borderColor     = textColor + '40';
+}
+
+// ── 生成未来日期序列（到2035年，每月一个点） ─────────
+function generateFutureDates(lastDate) {
+  var dates  = [];
+  var cursor = new Date(lastDate);
+  var end    = new Date('2035-01-01');
+  cursor.setMonth(cursor.getMonth() + 1);
+  while (cursor <= end) {
+    dates.push(new Date(cursor));
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+  return dates;
+}
+
+// ── 画图 ─────────────────────────────────────────────
+function drawChart(days, todayPrice, a, b, mult) {
+  var futureDates = generateFutureDates(days[days.length - 1].date);
+  var allDates    = days.map(function(d) { return d.date; }).concat(futureDates);
+
+  // 历史价格线
+  var priceData = days.map(function(d) { return { x: d.date, y: d.price }; });
+
+  // 三条模型线（历史 + 未来）
+  var centerData = allDates.map(function(d) { return { x: d, y: regressionPrice(d, a, b) }; });
+  var upperData  = allDates.map(function(d) { return { x: d, y: regressionPrice(d, a, b) * mult.upper }; });
+  var lowerData  = allDates.map(function(d) { return { x: d, y: regressionPrice(d, a, b) * mult.lower }; });
+
+  // 上下边界之间的填充区域
+  // 用 fill 让上边界填充到下边界
+  if (plChart) plChart.destroy();
+
+  var ctx = document.getElementById('plChart').getContext('2d');
+  plChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      datasets: [
+        {
+          // 上边界
+          label: '上边界（历史过热区）',
+          data: upperData,
+          borderColor: 'rgba(252,92,101,0.7)',
+          backgroundColor: 'rgba(252,92,101,0.06)',
+          borderWidth: 1.5,
+          borderDash: [5, 3],
+          pointRadius: 0,
+          tension: 0.2,
+          fill: '+2',   // 填充到下边界（下面第2个dataset）
+          yAxisID: 'y',
+          order: 3,
+        },
+        {
+          // 中心回归线
+          label: '中心回归线（幂律公允价值）',
+          data: centerData,
+          borderColor: '#74b9ff',
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.2,
+          fill: false,
+          yAxisID: 'y',
+          order: 2,
+        },
+        {
+          // 下边界
+          label: '下边界（历史低估区）',
+          data: lowerData,
+          borderColor: 'rgba(38,222,129,0.7)',
+          backgroundColor: 'rgba(38,222,129,0.06)',
+          borderWidth: 1.5,
+          borderDash: [5, 3],
+          pointRadius: 0,
+          tension: 0.2,
+          fill: false,
+          yAxisID: 'y',
+          order: 4,
+        },
+        {
+          // BTC历史价格（最上层）
+          label: 'BTC 价格',
+          data: priceData,
+          borderColor: '#f7b731',
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.15,
+          fill: false,
+          yAxisID: 'y',
+          order: 1,
+        },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          labels: {
+            color: '#e8e8f0',
+            font: { family: 'Space Mono, monospace', size: 11 },
+            boxWidth: 24, padding: 16,
+          }
+        },
+        tooltip: {
+          backgroundColor: '#13131a',
+          borderColor: '#1e1e2e',
+          borderWidth: 1,
+          titleColor: '#5a5a7a',
+          bodyColor: '#e8e8f0',
+          callbacks: {
+            title: function(items) {
+              return new Date(items[0].parsed.x).toLocaleDateString('zh-CN');
+            },
+            label: function(ctx) {
+              if (ctx.parsed.y === null || ctx.parsed.y === undefined) return null;
+              return ' ' + ctx.dataset.label + ': $' +
+                ctx.parsed.y.toLocaleString('en-US', {maximumFractionDigits: 0});
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: 'time',
+          time: { unit: 'year' },
+          ticks: { color: '#5a5a7a', font: { family: 'Space Mono, monospace' } },
+          grid:  { color: '#1e1e2e' },
+        },
+        y: {
+          type: 'logarithmic',
+          position: 'right',
+          ticks: {
+            color: '#5a5a7a',
+            font: { family: 'Space Mono, monospace' },
+            callback: function(v) {
+              var neat = [0.01, 0.1, 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000];
+              return neat.indexOf(v) >= 0 ? '$' + v.toLocaleString() : '';
+            }
+          },
+          grid: { color: '#1e1e2e' },
+        }
+      }
+    }
+  });
+}
+
+// ── 主流程 ──────────────────────────────────────────
+Promise.all([
+  fetch('https://caroljx.github.io/btc-dashboard/btc_history.csv')
+    .then(function(r) { return r.text(); }),
+  fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT')
+    .then(function(r) { return r.json(); })
+])
+.then(function(results) {
+  var days       = parseCSV(results[0]);
+  var todayPrice = parseFloat(results[1].price);
+
+  if (!days.length || !todayPrice) {
+    setStatus('error', '❌ 数据解析失败'); return;
+  }
+
+  // 拟合幂律回归
+  var reg  = fitPowerLaw(days);
+  var mult = calcBandMultipliers(days, reg.a, reg.b);
+
+  setStatus('ready',
+    '✅ 回归拟合完成 — ' + days.length + ' 天数据 | ' +
+    '系数 a=' + reg.a.toFixed(4) + ', b=' + reg.b.toFixed(4) + ' | ' +
+    '上倍数=' + mult.upper.toFixed(2) + 'x, 下倍数=' + mult.lower.toFixed(2) + 'x'
+  );
+
+  updateStats(todayPrice, reg.a, reg.b, mult);
+  drawChart(days, todayPrice, reg.a, reg.b, mult);
+})
+.catch(function(err) {
+  setStatus('error', '❌ 加载失败：' + err.message);
+});
+</script>
+</body>
+</html>
