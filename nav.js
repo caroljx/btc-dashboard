@@ -21,6 +21,7 @@ var NAV_ITEMS = {
     { key: 'fng', label: '恐惧与贪婪指数', file: 'fng.html' },
     { key: 'profitable-days', label: '盈利天数', file: 'profitable-days.html' },
     { key: 'rainbow', label: '彩虹价格图表', file: 'rainbow.html' },
+    { key: 'power-law', label: '幂律模型', file: 'power-law.html' },
     // 在这里继续添加指标页面 ↓
   ],
   tools: [
