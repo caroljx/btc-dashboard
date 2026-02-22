@@ -20,6 +20,7 @@ var NAV_ITEMS = {
     { key: '200wma', label: '200周移动平均线热力图', file: '200wma.html' },
     { key: 'fng', label: '恐惧与贪婪指数', file: 'fng.html' },
     { key: 'profitable-days', label: '盈利天数', file: 'profitable-days.html' },
+    { key: 'rainbow', label: '彩虹价格图表', file: 'rainbow.html' },
     // 在这里继续添加指标页面 ↓
   ],
   tools: [
