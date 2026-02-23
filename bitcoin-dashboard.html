@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BTC Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.1.1/dist/chartjs-chart-financial.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<script src="nav.js"></script>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131a;
+    --border: #1e1e2e;
+    --gold: #f7b731;
+    --gold-dim: #a07820;
+    --green: #26de81;
+    --red: #fc5c65;
+    --purple: #a29bfe;
+    --text: #e8e8f0;
+    --muted: #5a5a7a;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    /* overflow-x: hidden; removed for sidebar layout */
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 999;
+  }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 24px 40px; border-bottom: 1px solid var(--border);
+  }
+
+  .logo { display: flex; align-items: center; gap: 12px; }
+
+  .btc-icon {
+    width: 40px; height: 40px; background: var(--gold);
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-weight: 800; color: #000; font-size: 18px;
+    box-shadow: 0 0 20px rgba(247,183,49,0.4);
+  }
+
+  .logo-text { font-size: 20px; font-weight: 800; letter-spacing: 0.05em; }
+  .logo-text span { color: var(--gold); }
+
+  .live-badge {
+    display: flex; align-items: center; gap: 6px;
+    font-family: 'Space Mono', monospace; font-size: 11px;
+    color: var(--green); border: 1px solid var(--green);
+    padding: 4px 10px; border-radius: 20px;
+  }
+
+  .live-dot {
+    width: 6px; height: 6px;
+    background: var(--green); border-radius: 50%;
+    animation: pulse 1.5s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.8); }
+  }
+
+  .main { padding: 32px 40px; max-width: 1400px; margin: 0 auto; }
+
+  /* ── Price Hero ── */
+  .price-hero {
+    display: grid; grid-template-columns: 1fr auto;
+    gap: 24px; margin-bottom: 32px; align-items: end;
+  }
+
+  .price-label {
+    font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 8px; font-family: 'Space Mono', monospace;
+  }
+
+  .price-big {
+    font-size: clamp(42px, 6vw, 72px); font-weight: 800; line-height: 1;
+    color: var(--gold); text-shadow: 0 0 40px rgba(247,183,49,0.3);
+    font-family: 'Space Mono', monospace;
+  }
+
+  .price-change {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: 'Space Mono', monospace; font-size: 16px; font-weight: 700;
+    margin-top: 10px; padding: 6px 14px; border-radius: 6px;
+  }
+  .price-change.up   { background: rgba(38,222,129,0.12); color: var(--green); }
+  .price-change.down { background: rgba(252,92,101,0.12); color: var(--red); }
+
+  /* ── Stats ── */
+  .stats-row {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 16px; margin-bottom: 32px;
+  }
+
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px 24px;
+    position: relative; overflow: hidden; transition: border-color 0.2s;
+  }
+  .stat-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--gold), transparent); opacity: 0.5;
+  }
+  .stat-card:hover { border-color: var(--gold-dim); }
+  .stat-label {
+    font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase;
+    color: var(--muted); font-family: 'Space Mono', monospace; margin-bottom: 8px;
+  }
+  .stat-value { font-size: 22px; font-weight: 700; font-family: 'Space Mono', monospace; }
+
+  /* ── K-line tab ── */
+  .chart-header {
+    display: flex; align-items: center;
+    justify-content: space-between; margin-bottom: 16px;
+  }
+  .chart-title {
+    font-size: 14px; font-weight: 700;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+  }
+  .tf-group {
+    display: flex; gap: 4px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 4px;
+  }
+  .tf-btn {
+    background: none; border: none; color: var(--muted);
+    font-family: 'Space Mono', monospace; font-size: 12px;
+    padding: 6px 14px; border-radius: 6px; cursor: pointer; transition: all 0.15s;
+  }
+  .tf-btn:hover { color: var(--text); }
+  .tf-btn.active { background: var(--gold); color: #000; font-weight: 700; }
+
+  .chart-wrap {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; overflow: hidden;
+  }
+  #klineChart { width: 100%; height: 420px; display: block; }
+
+  @media (max-width: 900px) {
+    .cvdd-stats { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 768px) {
+    header, .main { padding: 16px 20px; }
+    .stats-row { grid-template-columns: 1fr 1fr; }
+    .price-hero { grid-template-columns: 1fr; }
+    .price-big { font-size: 40px; }
+    .cvdd-stats { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div id="nav-root"></div>
+
+<div class="main">
+
+  <!-- Price Hero -->
+  <div class="price-hero">
+    <div>
+      <div class="price-label">Bitcoin / USD &middot; 每分钟刷新</div>
+      <div class="price-big" id="priceDisplay">加载中...</div>
+      <div class="price-change up" id="changeDisplay">-- --</div>
+    </div>
+    <div style="text-align:right">
+      <div class="price-label">最后更新</div>
+      <div style="font-family:'Space Mono',monospace;font-size:13px;color:var(--muted)" id="lastUpdate">--</div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">24h 最高</div>
+      <div class="stat-value" id="high24h">--</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">24h 最低</div>
+      <div class="stat-value" id="low24h">--</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">24h 成交量</div>
+      <div class="stat-value" id="vol24h">--</div>
+    </div>
+  </div>
+
+  <!-- K-line 图表 -->
+  <div id="tab-kline">
+    <div class="chart-header">
+      <div class="chart-title">历史 K 线</div>
+      <div class="tf-group">
+        <button class="tf-btn" onclick="loadKline('1d', event)">1天</button>
+        <button class="tf-btn active" onclick="loadKline('1w', event)">1周</button>
+        <button class="tf-btn" onclick="loadKline('1m', event)">1月</button>
+        <button class="tf-btn" onclick="loadKline('3m', event)">3月</button>
+      </div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="klineChart"></canvas>
+    </div>
+  </div>
+
+</div><!-- /.main -->
+
+<script>
+// ════════════════════════════════════════════════════
+//  共用状态
+// ════════════════════════════════════════════════════
+var klineChart = null;
+var cvddChart  = null;
+var activeTf   = '1w';
+var secondsLeft = 60;
+
+// ════════════════════════════════════════════════════
+//  K 线图
+// ════════════════════════════════════════════════════
+function initKline() {
+  var ctx = document.getElementById('klineChart').getContext('2d');
+  klineChart = new Chart(ctx, {
+    type: 'candlestick',
+    data: { datasets: [{
+      label: 'BTC/USDT',
+      data: [],
+      color:       { up: '#26de81', down: '#fc5c65', unchanged: '#5a5a7a' },
+      borderColor: { up: '#26de81', down: '#fc5c65', unchanged: '#5a5a7a' },
+    }]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      layout: { padding: 16 },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              var d = ctx.raw;
+              return ['开: $'+d.o.toLocaleString(), '高: $'+d.h.toLocaleString(),
+                      '低: $'+d.l.toLocaleString(), '收: $'+d.c.toLocaleString()];
+            }
+          }
+        }
+      },
+      scales: {
+        x: { type: 'timeseries', ticks: { color: '#5a5a7a', maxTicksLimit: 8 }, grid: { color: '#1e1e2e' } },
+        y: { position: 'right',
+             ticks: { color: '#5a5a7a', callback: function(v) { return '$'+v.toLocaleString(); } },
+             grid: { color: '#1e1e2e' } }
+      }
+    }
+  });
+}
+
+var TF_MAP = {
+  '1d': { interval: '1h',  limit: 24 },
+  '1w': { interval: '4h',  limit: 42 },
+  '1m': { interval: '1d',  limit: 30 },
+  '3m': { interval: '1d',  limit: 90 },
+};
+
+function loadKline(tf, e) {
+  activeTf = tf;
+  document.querySelectorAll('.tf-btn').forEach(function(b) { b.classList.remove('active'); });
+  if (e && e.target) e.target.classList.add('active');
+  var cfg = TF_MAP[tf];
+  fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval='+cfg.interval+'&limit='+cfg.limit)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      klineChart.data.datasets[0].data = data.map(function(d) {
+        return { x: parseFloat(d[0]), o: parseFloat(d[1]), h: parseFloat(d[2]),
+                 l: parseFloat(d[3]), c: parseFloat(d[4]) };
+      });
+      klineChart.update();
+    });
+}
+
+// ════════════════════════════════════════════════════
+//  实时价格（Binance，每60秒）
+// ════════════════════════════════════════════════════
+function fetchPrice() {
+  fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var price  = parseFloat(d.lastPrice);
+      var change = parseFloat(d.priceChangePercent);
+      var isUp   = change >= 0;
+
+      document.getElementById('priceDisplay').textContent =
+        '$' + price.toLocaleString('en-US', { maximumFractionDigits: 2 });
+
+      var el = document.getElementById('changeDisplay');
+      el.innerHTML   = (isUp ? '&#9650; +' : '&#9660; ') + change.toFixed(2) + '%';
+      el.className   = 'price-change ' + (isUp ? 'up' : 'down');
+
+      document.getElementById('high24h').textContent =
+        '$' + parseFloat(d.highPrice).toLocaleString('en-US', { maximumFractionDigits: 0 });
+      document.getElementById('low24h').textContent =
+        '$' + parseFloat(d.lowPrice).toLocaleString('en-US', { maximumFractionDigits: 0 });
+
+      var vol = parseFloat(d.quoteVolume);
+      document.getElementById('vol24h').textContent =
+        vol > 1e9 ? (vol/1e9).toFixed(2)+'B' : (vol/1e6).toFixed(0)+'M';
+
+      document.getElementById('lastUpdate').textContent =
+        new Date().toLocaleTimeString('zh-CN');
+
+      secondsLeft = 60;
+    })
+    .catch(function() {
+      document.getElementById('priceDisplay').textContent = '获取失败';
+    });
+}
+
+// ════════════════════════════════════════════════════
+//  倒计时
+// ════════════════════════════════════════════════════
+function tickCountdown() {
+  var el = document.getElementById('countdown');
+  el.textContent = secondsLeft <= 0 ? '刷新中...' : secondsLeft + 's 后刷新';
+  if (secondsLeft > 0) secondsLeft--;
+}
+
+// ════════════════════════════════════════════════════
+//  启动
+// ════════════════════════════════════════════════════
+renderNav('dashboard');
+
+// 把倒计时徽章注入到导航栏右侧
+var badge = document.getElementById('nav-badge');
+if (badge) {
+  badge.innerHTML = '<div style="display:flex;align-items:center;gap:8px;font-family:monospace;font-size:11px;color:#5a5a7a"><div style="width:6px;height:6px;border-radius:50%;background:#26de81;animation:pulse 2s infinite"></div><span id="countdown">刷新中...</span></div>';
+}
+
+initKline();
+loadKline('1w', null);
+fetchPrice();
+
+setInterval(fetchPrice, 60000);
+setInterval(tickCountdown, 1000);
+tickCountdown();
+</script>
+</body>
+</html>

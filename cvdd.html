@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CVDD — BTC Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+<script src="nav.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f; --surface: #13131a; --border: #1e1e2e;
+    --gold: #f7b731; --green: #26de81; --red: #fc5c65;
+    --purple: #a29bfe; --text: #e8e8f0; --muted: #5a5a7a;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; min-height: 100vh; }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 999;
+  }
+  .main { padding: 32px 40px; max-width: 1400px; margin: 0 auto; }
+
+  .page-title { margin-bottom: 28px; }
+  .page-title h1 { font-size: 30px; font-weight: 800; margin-bottom: 8px; }
+  .page-title h1 span { color: var(--gold); }
+  .page-title p { font-size: 14px; color: var(--muted); line-height: 1.8; max-width: 700px; }
+  .page-title p strong { color: var(--text); }
+
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 22px; position: relative; overflow: hidden; }
+  .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
+  .stat-card.c-gold::before   { background: var(--gold); }
+  .stat-card.c-green::before  { background: var(--green); }
+  .stat-card.c-purple::before { background: var(--purple); }
+  .stat-card.c-muted::before  { background: var(--muted); }
+  .stat-label { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); font-family: 'Space Mono', monospace; margin-bottom: 8px; }
+  .stat-value { font-size: 20px; font-weight: 700; font-family: 'Space Mono', monospace; }
+  .stat-sub   { font-size: 11px; color: var(--muted); font-family: 'Space Mono', monospace; margin-top: 4px; }
+
+  .status-bar { font-family: 'Space Mono', monospace; font-size: 12px; color: var(--muted); margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .status-dot.loading { background: var(--gold); animation: pulse 1s infinite; }
+  .status-dot.ready   { background: var(--green); }
+  .status-dot.error   { background: var(--red); }
+  @keyframes pulse { 0%,100%{ opacity:1; transform:scale(1); } 50%{ opacity:0.4; transform:scale(0.8); } }
+
+  .chart-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 20px; height: 520px; overflow: hidden; }
+  .chart-label { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-family: 'Space Mono', monospace; margin-bottom: 16px; }
+  #cvddChart { width: 100%; height: 440px; display: block; }
+
+  .note { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 20px; font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted); line-height: 1.9; }
+  .note strong { color: var(--text); }
+
+  @media (max-width: 900px) { .stats-grid { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 600px) { .main { padding: 16px 20px; } }
+</style>
+</head>
+<body>
+
+<div id="nav-root"></div>
+
+<div class="main">
+  <div class="page-title">
+    <h1>近似 <span>CVDD</span></h1>
+    <p>
+      由链上分析师 <strong>Willy Woo</strong> 创建的底部判断指标。
+      本页图表使用 <strong>CoinGecko 公开数据 + 本地CSV</strong> 自行计算，
+      数据完全透明，无需第三方图表服务。
+      历史上 CVDD 曾多次触碰比特币<strong>周期底部</strong>，可作为长线参考。
+    </p>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card c-gold">
+      <div class="stat-label">当前 BTC 价格</div>
+      <div class="stat-value" id="cvdd-price" style="color:var(--gold)">--</div>
+    </div>
+    <div class="stat-card c-green">
+      <div class="stat-label">近似 CVDD</div>
+      <div class="stat-value" id="cvdd-value" style="color:var(--green)">--</div>
+      <div class="stat-sub">底部参考线</div>
+    </div>
+    <div class="stat-card c-purple">
+      <div class="stat-label">价格 / CVDD 比值</div>
+      <div class="stat-value" id="cvdd-ratio" style="color:var(--purple)">--</div>
+      <div class="stat-sub" id="cvdd-interp">--</div>
+    </div>
+    <div class="stat-card c-muted">
+      <div class="stat-label">数据覆盖</div>
+      <div class="stat-value" id="cvdd-days" style="font-size:16px;color:var(--text)">--</div>
+      <div class="stat-sub" id="cvdd-range">--</div>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <div class="status-dot loading" id="cvddDot"></div>
+    <span id="cvddStatus">正在加载 CSV + API 数据...</span>
+  </div>
+
+  <div class="chart-wrap">
+    <div class="chart-label">BTC 价格 + 近似 CVDD + 买入参考区间</div>
+    <canvas id="cvddChart"></canvas>
+  </div>
+
+  <div class="note">
+    <strong>数据来源：</strong>历史部分来自本地 btc_history.csv（CoinGecko 下载），
+    近一年数据由 CoinGecko API 实时补充，两者自动合并去重。<br>
+    <strong>计算方法：</strong>对数标准化成交量 &times; 当日价格，累计求和后除以天数，乘以校准系数 2.02。<br>
+    <strong>买入参考区间：</strong>黄色上沿 = CVDD &times; 1.7，绿色下沿 = CVDD &times; 1.0。
+    系数来自四个历史底部（2015 / 2018 / 2020 / 2022）的实测比值，进入区间不代表立即反弹，建议分批操作。<br>
+    <strong>注意：</strong>这是近似算法，不构成投资建议。
+  </div>
+</div>
+
+<script>
+renderNav('cvdd');
+
+var cvddChart  = null;
+var CVDD_SMOOTH = 2.02;
+
+var BOTTOMS = [
+  { date: '2015-01-14', price: 170,   label: '2015 底部\n$170'   },
+  { date: '2018-12-15', price: 3200,  label: '2018 底部\n$3,200' },
+  { date: '2020-03-13', price: 4000,  label: '2020 底部\n$4,000' },
+  { date: '2022-11-21', price: 15500, label: '2022 底部\n$15,500'},
+];
+
+function toDateStr(d) { return d.toISOString().substring(0, 10); }
+
+function parseCSV(text) {
+  var lines = text.trim().split('\n'), result = [];
+  for (var i = 1; i < lines.length; i++) {
+    var line   = lines[i].replace('\r', '');
+    var cols   = line.split(',');
+    var price  = parseFloat(cols[1]);
+    var volume = parseFloat(cols[3]);
+    if (!price || !volume || volume === 0) continue;
+    result.push({ dateStr: cols[0].substring(0,10), date: new Date(cols[0]), price: price, volume: volume });
+  }
+  return result;
+}
+
+function parseAPI(data) {
+  var prices = data.prices, volumes = data.total_volumes, result = [];
+  for (var i = 0; i < prices.length; i++) {
+    var price = prices[i][1], volume = volumes[i][1];
+    if (!price || !volume || volume === 0) continue;
+    var d = new Date(prices[i][0]);
+    result.push({ dateStr: toDateStr(d), date: d, price: price, volume: volume });
+  }
+  return result;
+}
+
+function mergeAndSort(csv, api) {
+  var apiDates = {};
+  api.forEach(function(d) { apiDates[d.dateStr] = true; });
+  var merged = csv.filter(function(d) { return !apiDates[d.dateStr]; }).concat(api);
+  merged.sort(function(a, b) { return a.date - b.date; });
+  return merged;
+}
+
+function calcCVDD(days) {
+  for (var i = 0; i < days.length; i++) {
+    days[i].btcVol = days[i].volume / days[i].price;
+    days[i].logVol = Math.log(days[i].btcVol);
+  }
+  var minLog = Infinity, maxLog = -Infinity;
+  for (var i = 0; i < days.length; i++) {
+    if (days[i].logVol < minLog) minLog = days[i].logVol;
+    if (days[i].logVol > maxLog) maxLog = days[i].logVol;
+  }
+  var cumulative = 0;
+  for (var i = 0; i < days.length; i++) {
+    var norm = (days[i].logVol - minLog) / (maxLog - minLog);
+    cumulative   += norm * days[i].price;
+    days[i].cvdd  = (cumulative / (i + 1)) * CVDD_SMOOTH;
+  }
+  return days;
+}
+
+function updateStats(days) {
+  var latest = days[days.length - 1];
+  var ratio  = latest.price / latest.cvdd;
+  var interp = ratio < 1.5 ? '🟢 接近历史底部'
+             : ratio < 3.0 ? '🟡 处于中间区间'
+             : ratio < 6.0 ? '🟠 高于底部参考线'
+             :                '🔴 明显高于底部参考线';
+  document.getElementById('cvdd-price').textContent = '$' + latest.price.toLocaleString('en-US', {maximumFractionDigits:0});
+  document.getElementById('cvdd-value').textContent = '$' + latest.cvdd.toLocaleString('en-US', {maximumFractionDigits:0});
+  document.getElementById('cvdd-ratio').textContent  = ratio.toFixed(2) + 'x';
+  document.getElementById('cvdd-interp').textContent = interp;
+  document.getElementById('cvdd-days').textContent   = days.length + ' 天';
+  document.getElementById('cvdd-range').textContent  = days[0].date.getFullYear() + ' → ' + latest.date.getFullYear();
+}
+
+function drawChart(days) {
+  var annotations = {};
+  BOTTOMS.forEach(function(b, i) {
+    var ts = new Date(b.date).getTime();
+    annotations['line'+i]  = { type:'line', xMin:ts, xMax:ts, borderColor:'rgba(252,92,101,0.5)', borderWidth:1, borderDash:[4,4] };
+    annotations['point'+i] = { type:'point', xValue:ts, yValue:b.price, backgroundColor:'#fc5c65', borderColor:'#fff', borderWidth:1.5, radius:5 };
+    annotations['label'+i] = { type:'label', xValue:ts, yValue:b.price, content:b.label.split('\n'), color:'#fc5c65', font:{family:'Space Mono,monospace',size:10,weight:'bold'}, textAlign:'center', yAdjust:(i%2===0)?-48:-80, callout:{enabled:true,borderColor:'rgba(252,92,101,0.4)',borderWidth:1} };
+  });
+
+  if (cvddChart) cvddChart.destroy();
+  var ctx = document.getElementById('cvddChart').getContext('2d');
+  cvddChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      datasets: [
+        { label:'BTC 价格', data:days.map(function(d){return{x:d.date,y:Math.round(d.price)};}), borderColor:'#f7b731', backgroundColor:'rgba(247,183,49,0.05)', borderWidth:1.5, pointRadius:0, tension:0.1, fill:false, yAxisID:'y' },
+        { label:'近似 CVDD（底部参考）', data:days.map(function(d){return{x:d.date,y:Math.round(d.cvdd)};}), borderColor:'#26de81', backgroundColor:'rgba(38,222,129,0.08)', borderWidth:2, pointRadius:0, tension:0.3, borderDash:[6,3], fill:false, yAxisID:'y' },
+        { label:'买入区间上沿（CVDD × 1.7）', data:days.map(function(d){return{x:d.date,y:Math.round(d.cvdd*1.7)};}), borderColor:'rgba(252,185,0,0.6)', backgroundColor:'rgba(252,185,0,0.07)', borderWidth:1.5, pointRadius:0, tension:0.3, borderDash:[3,3], fill:'+1', yAxisID:'y' },
+        { label:'买入区间下沿（CVDD × 1.0）', data:days.map(function(d){return{x:d.date,y:Math.round(d.cvdd*1.0)};}), borderColor:'rgba(38,222,129,0.4)', backgroundColor:'rgba(38,222,129,0.07)', borderWidth:1.5, pointRadius:0, tension:0.3, borderDash:[3,3], fill:false, yAxisID:'y' },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:'index', intersect:false },
+      plugins: {
+        legend:{ labels:{ color:'#e8e8f0', font:{family:'Space Mono,monospace',size:12}, boxWidth:24, padding:20 } },
+        tooltip:{ backgroundColor:'#13131a', borderColor:'#1e1e2e', borderWidth:1, titleColor:'#5a5a7a', bodyColor:'#e8e8f0',
+          callbacks:{
+            title:function(items){ return new Date(items[0].parsed.x).toLocaleDateString('zh-CN'); },
+            label:function(ctx){ if(ctx.datasetIndex===2||ctx.datasetIndex===3)return null; return ' '+ctx.dataset.label+': $'+ctx.parsed.y.toLocaleString(); }
+          }
+        },
+        annotation:{ annotations:annotations }
+      },
+      scales:{
+        x:{ type:'time', time:{unit:'year'}, ticks:{color:'#5a5a7a',font:{family:'Space Mono,monospace'}}, grid:{color:'#1e1e2e'} },
+        y:{ type:'logarithmic', position:'right', ticks:{color:'#5a5a7a',font:{family:'Space Mono,monospace'},callback:function(v){var n=[100,500,1000,5000,10000,50000,100000];return n.indexOf(v)>=0?'$'+v.toLocaleString():'';}}, grid:{color:'#1e1e2e'} }
+      }
+    }
+  });
+}
+
+// 主流程
+var dot    = document.getElementById('cvddDot');
+var status = document.getElementById('cvddStatus');
+
+Promise.all([
+  fetch('https://caroljx.github.io/btc-dashboard/btc_history.csv').then(function(r){return r.text();}),
+  fetch('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=365&interval=daily').then(function(r){return r.json();})
+])
+.then(function(results) {
+  status.textContent = '计算 CVDD 中...';
+  var csv    = parseCSV(results[0]);
+  var api    = parseAPI(results[1]);
+  var merged = mergeAndSort(csv, api);
+  var days   = calcCVDD(merged);
+  dot.className      = 'status-dot ready';
+  status.textContent = '✅ 数据就绪 — CSV ' + csv.length + ' 天 + API ' + api.length + ' 天，合并后共 ' + days.length + ' 天';
+  updateStats(days);
+  drawChart(days);
+})
+.catch(function(err) {
+  dot.className      = 'status-dot error';
+  status.textContent = '❌ 加载失败：' + err.message;
+});
+</script>
+</body>
+</html>
