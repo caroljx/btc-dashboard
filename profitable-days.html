@@ -268,7 +268,7 @@ function updateStats(result, todayPrice, totalDays, firstDate) {
 function drawChart(days, todayPrice) {
   var scatterData  = days.map(function(d) { return { x: d.date, y: d.price }; });
   var pointColors  = days.map(function(d) { return d.color; });
-  var priceLineData = days.map(function(d) { return { x: d.date, y: d.price }; });
+  var priceLineData = days.map(function(d) { return { x: d.date.getTime(), y: d.price }; });
 
   if (pdChart) pdChart.destroy();
 
@@ -306,9 +306,9 @@ function drawChart(days, todayPrice) {
           // 今日价格水平参考线（用折线模拟）
           label: '今日价格 $' + todayPrice.toLocaleString('en-US', {maximumFractionDigits: 0}),
           data: [
-            { x: days[0].date,                   y: todayPrice },
-            { x: days[days.length - 1].date,     y: todayPrice },
-          ],
+  { x: days[0].date.getTime(),               y: todayPrice },
+  { x: days[days.length - 1].date.getTime(), y: todayPrice },
+],
           type: 'line',
           borderColor: 'rgba(255,255,255,0.4)',
           backgroundColor: 'transparent',
